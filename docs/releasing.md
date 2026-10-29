@@ -10,7 +10,7 @@ Run **Actions → Signed installer → Run workflow** on `main` and choose a `ma
 gh workflow run installer.yml --ref main -f bump=patch
 ```
 
-The workflow builds the exact selected commit on an Apple silicon macOS 26 runner and runs the scanner, chart, and release-tool tests before importing credentials. It signs both native binaries and the application with Developer ID, hardened runtime, and secure timestamps. Apple must accept the application and DMG for notarization. The workflow staples both tickets and verifies the image by mounting it read-only. A second verification happens after credential cleanup.
+The workflow builds the exact selected commit on an Apple silicon macOS 26 runner and runs the scanner, chart, and release-tool tests before importing credentials. It signs the scanner, update helper, main executable, and application with Developer ID, hardened runtime, and secure timestamps. Apple must accept the application and DMG for notarization. The workflow staples both tickets and verifies the image by mounting it read-only. A second verification happens after credential cleanup.
 
 The `Diskie-signed-COMMIT-ATTEMPT` artifact contains:
 
@@ -57,4 +57,10 @@ python3 scripts/sign_installer.py --verify-only --source SOURCE_COMMIT \
 
 The credential helper and its recovery tests were adapted from [Stark commit `03bd056c34217147c436b47105c65c8a87c152be`](https://github.com/jshahbazi/stark/commit/03bd056c34217147c436b47105c65c8a87c152be), retaining the six secret names and output-redaction/cleanup behavior. The workspace, marker and notary profile are specific to Diskie.
 
-The version selector follows Stark’s immutable-tag version-bumping pattern. The signing, notarization, mounted-image verification and workflow isolation follow Stark's standalone `signed-release.yml`, `scripts/sign_distribution.py`, and `scripts/build_dmg.py` recipe. Diskie's implementation targets its two-binary application and drag-to-Applications DMG. It does not include Stark's CLI/runtime distribution or replacement launcher. The [Stark MIT notice](third-party/stark-MIT.md) is retained for adapted code.
+The version selector follows Stark’s immutable-tag version-bumping pattern. The signing, notarization, mounted-image verification and workflow isolation follow Stark's standalone `signed-release.yml`, `scripts/sign_distribution.py`, and `scripts/build_dmg.py` recipe. Diskie's implementation targets its native application and drag-to-Applications DMG. The in-app updater adapts Stark's release validation and staged replacement design using a native Swift helper. The [Stark MIT notice](third-party/stark-MIT.md) is retained for adapted code.
+
+## In-app updates
+
+The updater reads the public GitHub latest-release API and accepts only stable numeric versions newer than the installed version. It selects the versioned Apple silicon DMG at the exact Diskie release URL and verifies its GitHub SHA-256 digest and size. Both the DMG and contained app must pass Apple signature verification under team `S5BT2PRN5B`; the app must retain bundle identifier `local.diskspace.explorer`, match the selected version, support this Mac, and pass Gatekeeper.
+
+The native helper stages a verified app beside the installation, waits for the exact current process to exit, atomically exchanges app bundles, and confirms relaunch. A failed launch restores the previous app when possible and reports the error on restart. A successful update retains the previous bundle in a hidden `.diskie-update-UUID` folder beside the installation for recovery. Scan snapshots and privacy identifiers stay unchanged. Updates require a signed, user-owned app in a writable Applications folder; ad hoc development builds cannot update themselves.

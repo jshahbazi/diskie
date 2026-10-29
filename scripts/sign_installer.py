@@ -23,7 +23,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 APP = ROOT / '.build/Diskie.app'
 BUNDLE_ID = 'local.diskspace.explorer'
-BINARIES = ('Contents/Resources/disk-scanner', 'Contents/MacOS/Diskie')
+BINARIES = ('Contents/Resources/disk-scanner', 'Contents/Resources/diskie-update-helper', 'Contents/MacOS/Diskie')
 SHA = re.compile(r'[0-9a-f]{40}\Z')
 VERSION = re.compile(r'(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\Z')
 
@@ -170,7 +170,7 @@ def sign_installer(options):
     require(VERSION.fullmatch(version), 'version_invalid')
     require(info.get('CFBundleIdentifier') == BUNDLE_ID, 'bundle_id_mismatch')
     resources = APP / 'Contents/Resources'
-    require({p.name for p in resources.iterdir()} == {'chart.html', 'icon.icns', 'disk-scanner'}, 'unexpected_application_resources')
+    require({p.name for p in resources.iterdir()} == {'chart.html', 'icon.icns', 'disk-scanner', 'diskie-update-helper', 'Stark-MIT.md'}, 'unexpected_application_resources')
     (resources / 'build-info.json').write_text(json.dumps({'source_revision': options.source, 'version': version}) + '\n')
     for path in [*(APP / name for name in BINARIES), APP]:
         if path != APP:

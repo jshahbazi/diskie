@@ -5,6 +5,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var window: NSWindow!
     var web: WKWebView!
     var button: NSButton!
+    var updateButton: NSButton!
     var cancelButton: NSButton!
     var status: NSTextField!
     var spinner: NSProgressIndicator!
@@ -12,6 +13,9 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var cancelled = false
     var loaded = false
     var firstScan = false
+    var didFinishInitialLoad = false
+    var restartPending = false
+    var updater: DiskieUpdater!
     var progressTimer: Timer?
     var lastProgress: UInt64 = 0
     var lastProgressDate = Date()
@@ -29,29 +33,38 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         let bounds = NSRect(x: 0, y: 0, width: 1120, height: 780)
         window = NSWindow(contentRect: bounds, styleMask: [.titled, .closable, .miniaturizable, .resizable], backing: .buffered, defer: false)
         window.title = "Diskie"; window.minSize = NSSize(width: 660, height: 480); window.center()
+        updater = DiskieUpdater(window: window)
+        updater.onChange = { [weak self] in self?.updateUpdaterControls() }
+        updater.onReadyToRestart = { [weak self] in self?.restartAfterScanStops() }
         let container = NSView(frame: bounds); container.translatesAutoresizingMaskIntoConstraints = false
         window.contentView = container
         let bar = NSView(); bar.translatesAutoresizingMaskIntoConstraints = false
         bar.wantsLayer = true; bar.layer?.backgroundColor = NSColor(calibratedRed: 0.055, green: 0.078, blue: 0.125, alpha: 1).cgColor
         button = NSButton(title: "Rescan", target: self, action: #selector(rescan)); button.bezelStyle = .rounded; button.translatesAutoresizingMaskIntoConstraints = false
+        updateButton = NSButton(title: updater.buttonTitle, target: self, action: #selector(performUpdateAction)); updateButton.bezelStyle = .rounded; updateButton.translatesAutoresizingMaskIntoConstraints = false
         cancelButton = NSButton(title: "Cancel", target: self, action: #selector(cancel)); cancelButton.bezelStyle = .rounded; cancelButton.translatesAutoresizingMaskIntoConstraints = false; cancelButton.isHidden = true
         status = NSTextField(labelWithString: ""); status.textColor = .secondaryLabelColor; status.font = .systemFont(ofSize: 12); status.translatesAutoresizingMaskIntoConstraints = false
         spinner = NSProgressIndicator(); spinner.style = .spinning; spinner.controlSize = .small; spinner.translatesAutoresizingMaskIntoConstraints = false; spinner.isDisplayedWhenStopped = false
-        [button, cancelButton, status, spinner].forEach { bar.addSubview($0!) }
+        [button, cancelButton, status, spinner, updateButton].forEach { bar.addSubview($0!) }
         web = WKWebView(frame: .zero); web.navigationDelegate = self; web.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(bar); container.addSubview(web)
-        NSLayoutConstraint.activate([bar.topAnchor.constraint(equalTo: container.topAnchor), bar.leadingAnchor.constraint(equalTo: container.leadingAnchor), bar.trailingAnchor.constraint(equalTo: container.trailingAnchor), bar.heightAnchor.constraint(equalToConstant: 50), button.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 20), button.centerYAnchor.constraint(equalTo: bar.centerYAnchor), cancelButton.leadingAnchor.constraint(equalTo: button.trailingAnchor, constant: 8), cancelButton.centerYAnchor.constraint(equalTo: bar.centerYAnchor), spinner.leadingAnchor.constraint(equalTo: cancelButton.trailingAnchor, constant: 12), spinner.centerYAnchor.constraint(equalTo: bar.centerYAnchor), status.leadingAnchor.constraint(equalTo: spinner.trailingAnchor, constant: 8), status.centerYAnchor.constraint(equalTo: bar.centerYAnchor), status.trailingAnchor.constraint(lessThanOrEqualTo: bar.trailingAnchor, constant: -16), web.topAnchor.constraint(equalTo: bar.bottomAnchor), web.leadingAnchor.constraint(equalTo: container.leadingAnchor), web.trailingAnchor.constraint(equalTo: container.trailingAnchor), web.bottomAnchor.constraint(equalTo: container.bottomAnchor)])
+        NSLayoutConstraint.activate([bar.topAnchor.constraint(equalTo: container.topAnchor), bar.leadingAnchor.constraint(equalTo: container.leadingAnchor), bar.trailingAnchor.constraint(equalTo: container.trailingAnchor), bar.heightAnchor.constraint(equalToConstant: 50), button.leadingAnchor.constraint(equalTo: bar.leadingAnchor, constant: 20), button.centerYAnchor.constraint(equalTo: bar.centerYAnchor), cancelButton.leadingAnchor.constraint(equalTo: button.trailingAnchor, constant: 8), cancelButton.centerYAnchor.constraint(equalTo: bar.centerYAnchor), spinner.leadingAnchor.constraint(equalTo: cancelButton.trailingAnchor, constant: 12), spinner.centerYAnchor.constraint(equalTo: bar.centerYAnchor), status.leadingAnchor.constraint(equalTo: spinner.trailingAnchor, constant: 8), status.centerYAnchor.constraint(equalTo: bar.centerYAnchor), status.trailingAnchor.constraint(lessThanOrEqualTo: updateButton.leadingAnchor, constant: -8), updateButton.trailingAnchor.constraint(equalTo: bar.trailingAnchor, constant: -16), updateButton.centerYAnchor.constraint(equalTo: bar.centerYAnchor), web.topAnchor.constraint(equalTo: bar.bottomAnchor), web.leadingAnchor.constraint(equalTo: container.leadingAnchor), web.trailingAnchor.constraint(equalTo: container.trailingAnchor), web.bottomAnchor.constraint(equalTo: container.bottomAnchor)])
         do { try fm.createDirectory(at: folder, withIntermediateDirectories: true) } catch { showError("Unable to create the app’s data folder: \(error.localizedDescription)") }
         firstScan = !fm.fileExists(atPath: snapshot.path)
         guard let chart = Bundle.main.url(forResource: "chart", withExtension: "html") else { showError("The chart is missing from the app."); return }
         web.loadFileURL(chart, allowingReadAccessTo: chart.deletingLastPathComponent())
         window.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        updater.checkForUpdates()
     }
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
+        guard !didFinishInitialLoad else { return }
+        didFinishInitialLoad = true
         loaded = true
         do {
-            if fm.fileExists(atPath: snapshot.path) { try showSnapshot(Data(contentsOf: snapshot)) }
-            else {
+            if fm.fileExists(atPath: snapshot.path) {
+                do { try showSnapshot(Data(contentsOf: snapshot)) }
+                catch { showError("Could not load the saved scan: \(error.localizedDescription)") }
+            } else {
                 let attributes = try fm.attributesOfFileSystem(forPath: "/System/Volumes/Data")
                 let empty: [String: Any] = [
                     "tree": ["name": "Data volume", "size": 0, "children": []] as [String: Any],
@@ -61,7 +74,8 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                 try showSnapshot(JSONSerialization.data(withJSONObject: empty))
             }
         } catch { showError("Could not load the saved scan: \(error.localizedDescription)") }
-        if firstScan { status.stringValue = "Starting first scan…"; rescan() } else { status.stringValue = "Saved snapshot" }
+        status.stringValue = firstScan ? "Starting first scan…" : "Saved snapshot"
+        rescan()
     }
     func showSnapshot(_ data: Data) throws {
         _ = try JSONSerialization.jsonObject(with: data)
@@ -69,7 +83,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         web.evaluateJavaScript("window.showData(JSON.parse(new TextDecoder().decode(Uint8Array.from(atob('\(encoded)'), c => c.charCodeAt(0)))))") { _, error in if let error = error { self.showError("Could not display the scan: \(error.localizedDescription)") } }
     }
     @objc func rescan() {
-        guard process == nil else { return }
+        guard process == nil, !updater.isBusy else { return }
         guard let executable = Bundle.main.url(forResource: "disk-scanner", withExtension: nil) else { showError("The scanner is missing from the app."); return }
         cleanTemporaryFiles(); cancelled = false
         lastProgress = 0; lastProgressDate = Date()
@@ -78,9 +92,13 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         task.terminationHandler = { p in
             DispatchQueue.main.async {
                 self.progressTimer?.invalidate(); self.progressTimer = nil
-                self.process = nil; self.button.isEnabled = true; self.cancelButton.isHidden = true; self.spinner.stopAnimation(nil)
+                self.process = nil; self.button.isEnabled = !self.updater.isBusy; self.cancelButton.isHidden = true; self.spinner.stopAnimation(nil)
                 defer { self.cleanTemporaryFiles(); self.status.toolTip = nil }
-                if self.cancelled { self.status.stringValue = "Scan cancelled; showing previous snapshot"; return }
+                if self.cancelled {
+                    self.status.stringValue = "Scan cancelled; showing previous snapshot"
+                    if self.restartPending { self.restartPending = false; NSApp.terminate(nil) }
+                    return
+                }
                 guard p.terminationStatus == 0 else { self.status.stringValue = "Scan failed; showing previous snapshot"; self.showError("The disk scan failed (exit \(p.terminationStatus)). Your previous snapshot is still available."); return }
                 do {
                     let data = try Data(contentsOf: self.temp)
@@ -92,6 +110,7 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                     let coverage = errors > 0 ? " · \(errors.formatted()) unreadable paths" : ""
                     self.status.stringValue = "Scan complete in \(self.duration(seconds))\(coverage)"
                 } catch { self.status.stringValue = "Scan failed; showing previous snapshot"; self.showError("Could not save the scan: \(error.localizedDescription)") }
+                if self.restartPending { self.restartPending = false; NSApp.terminate(nil) }
             }
         }
         do {
@@ -122,6 +141,21 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         status.toolTip = result["path"] as? String
     }
     @objc func cancel() { guard let p = process else { return }; cancelled = true; status.stringValue = "Stopping scan…"; p.terminate() }
+    @objc func performUpdateAction() { updater.performAction() }
+    @objc func checkForUpdates(_ sender: Any?) { updater.checkForUpdates(manual: true) }
+    @objc func showAbout(_ sender: Any?) { NSApp.orderFrontStandardAboutPanel(options: [.applicationName: "Diskie"]) }
+    func updateUpdaterControls() {
+        updateButton?.title = updater.buttonTitle
+        updateButton?.isEnabled = !updater.isBusy
+        button?.isEnabled = process == nil && !updater.isBusy
+    }
+    func restartAfterScanStops() {
+        guard let process, process.isRunning else { NSApp.terminate(nil); return }
+        restartPending = true
+        cancelled = true
+        status.stringValue = "Stopping scan to install update…"
+        process.terminate()
+    }
     func showError(_ text: String) { let alert = NSAlert(); alert.messageText = "Diskie"; alert.informativeText = text; alert.alertStyle = .warning; alert.runModal() }
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
     func applicationWillTerminate(_ notification: Notification) {
@@ -132,5 +166,15 @@ final class App: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 let app = NSApplication.shared
 let delegate = App(); app.delegate = delegate; app.setActivationPolicy(.regular)
 let menu = NSMenu(); let appMenuItem = NSMenuItem(); menu.addItem(appMenuItem)
-let appMenu = NSMenu(); appMenu.addItem(withTitle: "Quit Diskie", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"); appMenuItem.submenu = appMenu; app.mainMenu = menu
+appMenuItem.title = "Diskie"
+let appMenu = NSMenu()
+appMenu.addItem(withTitle: "About Diskie", action: #selector(App.showAbout(_:)), keyEquivalent: "")
+appMenu.addItem(NSMenuItem.separator())
+appMenu.addItem(withTitle: "Check for Updates…", action: #selector(App.checkForUpdates(_:)), keyEquivalent: "")
+appMenu.addItem(NSMenuItem.separator())
+appMenu.addItem(withTitle: "Quit Diskie", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q")
+appMenu.items[0].target = delegate
+appMenu.items[2].target = delegate
+appMenu.items[4].target = app
+appMenuItem.submenu = appMenu; app.mainMenu = menu
 app.run()

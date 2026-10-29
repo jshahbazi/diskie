@@ -4,7 +4,9 @@
 
 A local macOS disk usage explorer with a drill-down chart. Scan the internal data volume, explore the largest folders and files, and rescan when you need a fresh view.
 
-Diskie opens the last saved scan immediately. A native background scanner uses up to six workers and macOS bulk metadata reads. The toolbar shows the file count, elapsed time, and worker count; Cancel keeps the previous snapshot.
+Diskie opens the last saved scan immediately and starts a fresh scan on every launch. A native background scanner uses up to six workers and macOS bulk metadata reads. The toolbar shows the file count, elapsed time, and worker count; Cancel keeps the previous snapshot.
+
+Diskie checks the latest stable GitHub release on launch and every six hours. Use **Check for Updates…** in the toolbar or Diskie menu to check manually. When an update is available, choose **Update to VERSION… → Install and Restart**. Diskie downloads and verifies the installer, replaces itself, and reopens with a fresh scan. Install the signed release in `/Applications` or `~/Applications` to use updates. Current published installers target Apple silicon.
 
 ## Build and run
 
@@ -43,7 +45,7 @@ Click a slice or row to drill down. Use the path at the top to go back. Files an
 
 The disk overview shows the operating system's reported capacity. Folder sizes estimate allocated bytes. APFS clones, snapshots, compression, hard links, and protected paths can make folder totals differ from capacity or from the space a deletion would reclaim. Hard-linked files are counted once across workers; the first path encountered receives their bytes. Symlinks are not followed and other mounted volumes are excluded. Results are a snapshot of a changing filesystem.
 
-Scans run locally and read folder metadata. The app has no network requests or deletion controls. New installations save scan data under `~/Library/Application Support/Diskie/`. Upgrades from the original Disk Space Explorer prototype keep its existing data directory and bundle identifier for compatibility.
+Scans run locally and read folder metadata. The updater contacts GitHub for release metadata and installer downloads; scan data and local paths are never uploaded. New installations save scan data under `~/Library/Application Support/Diskie/`. Upgrades from the original Disk Space Explorer prototype keep its existing data directory and bundle identifier for compatibility.
 
 ## Tests
 
@@ -53,7 +55,7 @@ python3 -m unittest discover -s tests -v
 node tests/test_chart.cjs
 ```
 
-The scanner tests cover allocated-byte accounting, hard links, sparse files, Unicode filenames, symlink exclusion, permission failures, multiple workers, the bounded queue, and the POSIX fallback.
+The scanner tests cover allocated-byte accounting, hard links, sparse files, Unicode filenames, symlink exclusion, permission failures, multiple workers, the bounded queue, and the POSIX fallback. Updater tests cover release selection, download integrity, publisher verification, safe installation paths, atomic replacement, and rollback.
 
 ## Scanner CLI
 
