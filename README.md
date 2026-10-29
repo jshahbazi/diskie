@@ -19,6 +19,8 @@ To install, copy `.build/Diskie.app` into Applications. To create a disk image:
 ./scripts/package.sh
 ```
 
+GitHub Actions also builds a development installer on every push and pull request. The manual **Signed installer** workflow creates a Developer ID signed and notarized DMG using the same credential setup as Stark. See [installer workflows](docs/releasing.md) for artifact downloads and setup.
+
 The installer is written to `dist/Diskie.dmg`. A default build uses an ad hoc signature for local development. To use your own signing identity:
 
 ```sh

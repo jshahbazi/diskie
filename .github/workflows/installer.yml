@@ -1,0 +1,74 @@
+name: Signed installer
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: diskie-signed-installer
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  installer:
+    name: Build, sign and notarize the installer
+    if: github.repository == 'jshahbazi/diskie' && github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 75
+    environment: macos-release
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          version: '0.12.24'
+          python-version: '3.13.13'
+          enable-cache: false
+      - name: Select the pinned Python runtime
+        run: dirname "$(uv python find --managed-python 3.13.13)" >> "$GITHUB_PATH"
+      - name: Check the exact source and Apple silicon runner
+        run: |
+          set -euo pipefail
+          test "$(uname -m)" = arm64
+          test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
+          xcodebuild -version
+      - name: Build and test before importing Apple credentials
+        run: |
+          ./scripts/build.sh
+          python -m unittest discover -s tests -v
+          node tests/test_chart.cjs
+      - name: Import temporary Apple credentials
+        env:
+          MACOS_CERTIFICATE_P12_BASE64: ${{ secrets.MACOS_CERTIFICATE_P12_BASE64 }}
+          MACOS_CERTIFICATE_PASSWORD: ${{ secrets.MACOS_CERTIFICATE_PASSWORD }}
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+          APPLE_API_KEY_P8_BASE64: ${{ secrets.APPLE_API_KEY_P8_BASE64 }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER_ID: ${{ secrets.APPLE_API_ISSUER_ID }}
+        run: python .github/scripts/apple_credentials.py setup
+      - name: Sign and notarize the app and disk image
+        env:
+          MACOS_SIGNING_IDENTITY: ${{ secrets.MACOS_SIGNING_IDENTITY }}
+        run: |
+          python scripts/sign_installer.py --source "$GITHUB_SHA" \
+            --keychain "$RUNNER_TEMP/diskie-signing/signing.keychain-db"
+      - name: Remove temporary Apple credentials
+        if: always()
+        run: python .github/scripts/apple_credentials.py cleanup
+      - name: Verify the installer after credential cleanup
+        run: python scripts/sign_installer.py --verify-only --source "$GITHUB_SHA"
+      - name: Upload the verified installer and receipts
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: Diskie-signed-${{ github.sha }}-${{ github.run_attempt }}
+          path: dist/signed-installer/*
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 30
