@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDisplayName</key>
+	<string>Diskie</string>
+	<key>CFBundleExecutable</key>
+	<string>Diskie</string>
+	<key>CFBundleIconFile</key>
+	<string>icon</string>
+	<key>CFBundleIdentifier</key>
+	<string>local.diskspace.explorer</string>
+	<key>CFBundleName</key>
+	<string>Diskie</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>1.2.1</string>
+	<key>CFBundleVersion</key>
+	<string>4</string>
+	<key>LSMinimumSystemVersion</key>
+	<string>13.0</string>
+	<key>NSDesktopFolderUsageDescription</key>
+	<string>Diskie reads folder metadata to show disk usage.</string>
+	<key>NSDocumentsFolderUsageDescription</key>
+	<string>Diskie reads folder metadata to show disk usage.</string>
+	<key>NSDownloadsFolderUsageDescription</key>
+	<string>Diskie reads folder metadata to show disk usage.</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+</dict>
+</plist>

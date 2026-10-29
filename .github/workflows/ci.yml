@@ -1,0 +1,15 @@
+name: Build and test
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  macos:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build local app
+        run: ./scripts/build.sh
+      - name: Test scanner
+        run: python3 -m unittest discover -s tests -v
+      - name: Test chart navigation
+        run: node tests/test_chart.cjs
