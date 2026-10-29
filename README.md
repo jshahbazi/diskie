@@ -1,5 +1,7 @@
 # Diskie
 
+[Download the latest installer](https://github.com/jshahbazi/diskie/releases/latest/download/Diskie.dmg)
+
 A local macOS disk usage explorer with a drill-down chart. Scan the internal data volume, explore the largest folders and files, and rescan when you need a fresh view.
 
 Diskie opens the last saved scan immediately. A native background scanner uses up to six workers and macOS bulk metadata reads. The toolbar shows the file count, elapsed time, and worker count; Cancel keeps the previous snapshot.
@@ -19,7 +21,7 @@ To install, copy `.build/Diskie.app` into Applications. To create a disk image:
 ./scripts/package.sh
 ```
 
-GitHub Actions also builds a development installer on every push and pull request. The manual **Signed installer** workflow creates a Developer ID signed and notarized DMG using the same credential setup as Stark. See [installer workflows](docs/releasing.md) for artifact downloads and setup.
+GitHub Actions also builds a development installer on every push and pull request. The manual **Signed installer** workflow creates a Developer ID signed and notarized DMG and publishes a versioned GitHub release using the same credential setup as Stark. See [installer workflows](docs/releasing.md) for artifact downloads and setup.
 
 The installer is written to `dist/Diskie.dmg`. A default build uses an ad hoc signature for local development. To use your own signing identity:
 
